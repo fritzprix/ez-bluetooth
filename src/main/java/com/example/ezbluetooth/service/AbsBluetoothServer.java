@@ -7,7 +7,7 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
 
-import com.example.ezbluetooth.BluetoothServiceServer;
+import com.example.ezbluetooth.BluetoothServer;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -17,12 +17,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
+ *
  * Created by innocentevil on 17. 1. 30.
  */
 
-public abstract class AbsBluetoothServiceServer implements BluetoothServiceServer {
+public abstract class AbsBluetoothServer implements BluetoothServer {
 
-    private static final String TAG = AbsBluetoothServiceServer.class.getCanonicalName();
+    private static final String TAG = AbsBluetoothServer.class.getCanonicalName();
 
     private volatile boolean isAlive;
     private int svcId;
@@ -34,7 +35,7 @@ public abstract class AbsBluetoothServiceServer implements BluetoothServiceServe
     private ThreadPoolExecutor mPoolExecutor;
 
 
-    public AbsBluetoothServiceServer(int maxClientCount) {
+    public AbsBluetoothServer(int maxClientCount) {
         mClients = new SparseArray<>();
         mClientJobs = new SparseArray<>();
         mClientIsValidArray = new SparseBooleanArray();
@@ -99,7 +100,7 @@ public abstract class AbsBluetoothServiceServer implements BluetoothServiceServe
         final Runnable clientHandleTask = new Runnable() {
             @Override
             public void run() {
-                synchronized (AbsBluetoothServiceServer.this) {
+                synchronized (AbsBluetoothServer.this) {
                     mClientIsValidArray.put(clientId, true);
                 }
                 int bufferSize = getReadSize();
@@ -126,10 +127,10 @@ public abstract class AbsBluetoothServiceServer implements BluetoothServiceServe
                 } catch (IOException e) {
                     Log.e(TAG, e.getLocalizedMessage());
                 } finally {
-                    synchronized (AbsBluetoothServiceServer.this) {
+                    synchronized (AbsBluetoothServer.this) {
                         mClients.remove(clientId);
                         mClientIsValidArray.delete(clientId);
-                        AbsBluetoothServiceServer.this.notifyAll();
+                        AbsBluetoothServer.this.notifyAll();
                     }
                 }
             }

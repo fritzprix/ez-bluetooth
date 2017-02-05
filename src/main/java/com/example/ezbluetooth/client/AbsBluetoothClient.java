@@ -5,7 +5,7 @@ import android.bluetooth.BluetoothSocket;
 import android.util.Log;
 
 
-import com.example.ezbluetooth.BluetoothServiceClient;
+import com.example.ezbluetooth.BluetoothClient;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -17,9 +17,9 @@ import java.util.Locale;
  *
  */
 
-public abstract class AbsBluetoothServiceClient implements BluetoothServiceClient {
+public abstract class AbsBluetoothClient implements BluetoothClient {
 
-    private static final String TAG = AbsBluetoothServiceClient.class.getCanonicalName();
+    private static final String TAG = AbsBluetoothClient.class.getCanonicalName();
 
     private BluetoothDevice mDevice;
     private volatile Thread mClientThread;
@@ -82,7 +82,7 @@ public abstract class AbsBluetoothServiceClient implements BluetoothServiceClien
                     if(mClientSocket.isConnected()) {
                         try {
                             mClientSocket.close();
-                            synchronized (AbsBluetoothServiceClient.this) {
+                            synchronized (AbsBluetoothClient.this) {
                                 mClientSocket = null;
                             }
                         } catch (IOException e) {

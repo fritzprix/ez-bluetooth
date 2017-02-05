@@ -3,17 +3,18 @@ package com.example.ezbluetooth.client.impl;
 import android.util.Log;
 
 
-import com.example.ezbluetooth.client.AbsBluetoothServiceClient;
+import com.example.ezbluetooth.client.AbsBluetoothClient;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.UUID;
 
 /**
+ *
  * Created by innocentevil on 17. 2. 4.
  */
 
-public class SimpleEchoClient extends AbsBluetoothServiceClient {
+public class SimpleEchoClient extends AbsBluetoothClient {
 
     private static final String TAG = SimpleEchoClient.class.getCanonicalName();
     private static final UUID SVC_UUID = UUID.fromString("604388f7-2241-45fa-9e78-e472b90b62d6");

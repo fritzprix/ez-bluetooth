@@ -1,16 +1,17 @@
 package com.example.ezbluetooth.service.impl;
 
 
-import com.example.ezbluetooth.service.AbsBluetoothServiceServer;
+import com.example.ezbluetooth.service.AbsBluetoothServer;
 
 import java.util.UUID;
 
 
 /**
+ *
  * Created by innocentevil on 17. 1. 30.
  */
 
-public class SimpleEchoServer extends AbsBluetoothServiceServer {
+public class SimpleEchoServer extends AbsBluetoothServer {
 
     private static final String TAG = SimpleEchoServer.class.getCanonicalName();
     private static final UUID SVC_UUID = UUID.fromString("604388f7-2241-45fa-9e78-e472b90b62d6");
