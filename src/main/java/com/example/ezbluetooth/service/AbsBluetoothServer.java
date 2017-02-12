@@ -6,7 +6,6 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
-
 import com.example.ezbluetooth.BluetoothServer;
 
 import java.io.DataInputStream;
