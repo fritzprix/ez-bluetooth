@@ -1,8 +1,10 @@
 package com.example.ezbluetooth;
 
 import android.bluetooth.BluetoothDevice;
+import android.support.annotation.Nullable;
 
 import java.io.IOException;
+import java.security.InvalidParameterException;
 import java.util.UUID;
 
 /**
@@ -14,9 +16,9 @@ public interface BluetoothClient {
 
     UUID getServiceUuid();
 
-    boolean onBindDevice(BluetoothDevice device);
+    int onBindDevice(BluetoothDevice device);
 
-    BluetoothDevice getBluetoothDevice();
+    @Nullable BluetoothDevice getBluetoothDevice(int devId);
 
     void onConnected();
 
@@ -24,7 +26,7 @@ public interface BluetoothClient {
 
     String getServiceName();
 
-    void start() throws IllegalStateException, IOException;
+    void start(int devId) throws IllegalStateException, InvalidParameterException ,IOException;
 
     void stop();
 

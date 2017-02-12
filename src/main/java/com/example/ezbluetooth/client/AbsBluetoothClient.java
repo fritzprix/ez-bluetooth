@@ -2,7 +2,9 @@ package com.example.ezbluetooth.client;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.support.annotation.Nullable;
 import android.util.Log;
+import android.util.SparseArray;
 
 
 import com.example.ezbluetooth.BluetoothClient;
@@ -10,6 +12,8 @@ import com.example.ezbluetooth.BluetoothClient;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.security.InvalidParameterException;
+import java.util.HashSet;
 import java.util.Locale;
 
 /**
@@ -21,20 +25,30 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
 
     private static final String TAG = AbsBluetoothClient.class.getCanonicalName();
 
-    private BluetoothDevice mDevice;
     private volatile Thread mClientThread;
     private BluetoothSocket mClientSocket;
     private boolean isConnected;
     private DataOutputStream mOutputStream;
+    private int mDevId;
+    private SparseArray<BluetoothDevice> mDevices;
+    private HashSet<Integer> mDevIds;
+    private int currentDevId;
+
+    protected AbsBluetoothClient() {
+        mDevId = 0;
+        currentDevId = 0;
+        mDevices = new SparseArray<>();
+        mDevIds = new HashSet<>();
+    }
 
     @Override
-    public boolean onBindDevice(BluetoothDevice device) {
-        if(mDevice != null) {
-            return false;
+    public int onBindDevice(BluetoothDevice device) {
+        if(device == null) {
+            return -1;
         }
-
-        mDevice = device;
-        return true;
+        mDevices.put(mDevId, device);
+        mDevIds.add(mDevId);
+        return mDevId++;
     }
 
     @Override
@@ -47,53 +61,66 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
         isConnected = false;
     }
 
-    public synchronized void start() throws IllegalStateException, IOException {
-        if(mDevice == null) {
+    @Override
+    public synchronized void start(int devId) throws IllegalStateException, IOException, InvalidParameterException {
+
+        if(!mDevIds.contains(devId)) {
+            throw new InvalidParameterException(String.format(Locale.getDefault(),"Invalid device Id (%d)", devId));
+        }
+
+        final BluetoothDevice device = mDevices.get(devId);
+        if(device == null) {
             throw new IllegalStateException(String.format(Locale.getDefault(), "No device is bound to service %s", getServiceName()));
         }
 
         isConnected = false;
         mOutputStream = null;
-        mClientThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    mClientSocket = mDevice.createRfcommSocketToServiceRecord(getServiceUuid());
-                    mClientSocket.connect();
-                    onConnected();
-                    isConnected = true;
-                    mOutputStream = new DataOutputStream(mClientSocket.getOutputStream());
-                    DataInputStream dis = new DataInputStream(mClientSocket.getInputStream());
-                    Log.e(TAG, "Connected");
-                    onServiceReady();
-                    Log.e(TAG, "Service Ready");
-                    byte[] rxBuffer = new byte[getReadSize()];
-                    while(isConnected) {
-                        if(dis.read(rxBuffer) > 0) {
-                            byte[] txData = onDataReceived(rxBuffer);
-                            if (txData != null) {
-                                mOutputStream.write(txData);
-                            }
-                        }
-                    }
-                } catch (IOException e) {
-                    Log.e(TAG, e.getLocalizedMessage());
-                } finally {
-                    if(mClientSocket.isConnected()) {
-                        try {
-                            mClientSocket.close();
-                            synchronized (AbsBluetoothClient.this) {
-                                mClientSocket = null;
-                            }
-                        } catch (IOException e) {
-                            Log.e(TAG, e.getLocalizedMessage());
-                        }
-                    }
-                    onDisconnected();
-                }
+        synchronized (this) {
+            if(mClientThread != null) {
+                throw new IllegalStateException(String.format(Locale.getDefault(), "Client is already started %d", currentDevId));
             }
-        });
-        mClientThread.start();
+            mClientThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        mClientSocket = device.createRfcommSocketToServiceRecord(getServiceUuid());
+                        mClientSocket.connect();
+                        onConnected();
+                        isConnected = true;
+                        mOutputStream = new DataOutputStream(mClientSocket.getOutputStream());
+                        DataInputStream dis = new DataInputStream(mClientSocket.getInputStream());
+                        Log.e(TAG, "Connected");
+                        onServiceReady();
+                        Log.e(TAG, "Service Ready");
+                        byte[] rxBuffer = new byte[getReadSize()];
+                        while (isConnected) {
+                            if (dis.read(rxBuffer) > 0) {
+                                byte[] txData = onDataReceived(rxBuffer);
+                                if (txData != null) {
+                                    mOutputStream.write(txData);
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        Log.e(TAG, e.getLocalizedMessage());
+                    } finally {
+                        if (mClientSocket.isConnected()) {
+                            try {
+                                mClientSocket.close();
+                                synchronized (AbsBluetoothClient.this) {
+                                    mClientSocket = null;
+                                }
+                            } catch (IOException e) {
+                                Log.e(TAG, e.getLocalizedMessage());
+                            }
+                        }
+                        onDisconnected();
+                    }
+                }
+            });
+            mClientThread.start();
+            currentDevId = devId;
+        }
     }
 
     protected void write(byte[] data) throws IOException {
@@ -115,8 +142,7 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
     }
 
     public synchronized void stop() {
-        if(mDevice == null ||
-           mClientThread == null ||
+        if(mClientThread == null ||
            mClientSocket == null) {
             return;
         }
@@ -128,16 +154,12 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
         }
     }
 
-    public String getDeviceName() throws IllegalStateException {
-        if(mDevice == null) {
-            throw new IllegalStateException(String.format(Locale.getDefault(), "No device is bound to service %s", getServiceName()));
-        }
-        return mDevice.getName();
-    }
-
     @Override
-    public final BluetoothDevice getBluetoothDevice() {
-        return mDevice;
+    @Nullable public final BluetoothDevice getBluetoothDevice(int id) {
+        if(!mDevIds.contains(id)) {
+            return null;
+        }
+        return mDevices.get(id);
     }
 
     protected abstract int getReadSize();

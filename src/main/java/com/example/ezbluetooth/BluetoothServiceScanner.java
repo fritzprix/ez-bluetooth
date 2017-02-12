@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.ParcelUuid;
 import android.util.Log;
+import android.util.SparseArray;
 import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
@@ -38,14 +39,14 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
 
     private List<BluetoothClient> mServices;
     private List<BluetoothDevice> mDevices;
-    private HashMap<BluetoothDevice, BluetoothClient> mServiceMap;
+    private SparseArray<BluetoothClient> mServiceMap;
     private BluetoothAdapter mBluetoothAdapter;
     private WeakReference<Callback> wrCallback;
 
     public BluetoothServiceScanner(Callback callback) {
         wrCallback = new WeakReference<>(callback);
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        mServiceMap = new HashMap<>();
+        mServiceMap = new SparseArray<>();
     }
 
     @Override
@@ -74,6 +75,7 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
     private void onDiscoveryFinished(Context context) {
         Log.d(TAG, String.format(Locale.getDefault(), "Discovery Finished /w %d Devices found", mDevices.size()));
         final Callback callback = wrCallback.get();
+        int devId;
         for(BluetoothDevice device : mDevices) {
             /**
              *  try fetch uuid(s) from remote device
@@ -81,9 +83,9 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
             if(device.fetchUuidsWithSdp()) {
                 for(BluetoothClient service : mServices) {
                     if(searchUuid(device.getUuids(),service.getServiceUuid())) {
-                        if(service.onBindDevice(device)) {
-                            mServiceMap.put(device, service);
-                            callback.onServiceReady(service);
+                        if((devId = service.onBindDevice(device)) >= 0) {
+                            mServiceMap.put(devId, service);
+                            callback.onServiceReady(service, devId);
                         }
                     }
                 }
@@ -110,13 +112,13 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
     }
 
 
-    private boolean searchUuid(ParcelUuid[] uuids, UUID doodUuid) {
+    private boolean searchUuid(ParcelUuid[] uuids, UUID svcUuid) {
         if(uuids == null) {
             return false;
         }
         for(ParcelUuid uuid : uuids) {
             Log.d(TAG, uuid.toString());
-            if(uuid.getUuid().compareTo(doodUuid) == 0)
+            if(uuid.getUuid().compareTo(svcUuid) == 0)
                 return true;
         }
         return false;
@@ -139,7 +141,7 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
 
     public interface Callback {
 
-        void onServiceReady(BluetoothClient service);
+        void onServiceReady(BluetoothClient service, int devId);
 
         void onDeviceFound(BluetoothDevice device, short rssi);
 
