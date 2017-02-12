@@ -1,6 +1,7 @@
 package com.example.ezbluetooth;
 
 import android.bluetooth.BluetoothDevice;
+import android.os.Parcelable;
 import android.support.annotation.Nullable;
 
 import java.io.IOException;
@@ -12,7 +13,7 @@ import java.util.UUID;
  * Created by innocentevil on 17. 1. 30.
  */
 
-public interface BluetoothClient {
+public interface BluetoothClient extends Parcelable {
 
     UUID getServiceUuid();
 

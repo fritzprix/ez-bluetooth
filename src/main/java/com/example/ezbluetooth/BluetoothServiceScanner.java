@@ -13,7 +13,6 @@ import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -30,10 +29,13 @@ import static android.content.ContentValues.TAG;
 public class BluetoothServiceScanner extends BroadcastReceiver {
 
     private static IntentFilter BT_FILTER;
+    private static BluetoothServiceScanner SINGLETON;
     static {
+        SINGLETON = null;
         BT_FILTER = new IntentFilter();
         BT_FILTER.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         BT_FILTER.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
+        BT_FILTER.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         BT_FILTER.addAction(BluetoothDevice.ACTION_FOUND);
     }
 
@@ -41,12 +43,16 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
     private List<BluetoothDevice> mDevices;
     private SparseArray<BluetoothClient> mServiceMap;
     private BluetoothAdapter mBluetoothAdapter;
-    private WeakReference<Callback> wrCallback;
+    private WeakReference<DiscoveryListener> wrCallback;
 
-    public BluetoothServiceScanner(Callback callback) {
-        wrCallback = new WeakReference<>(callback);
+    public BluetoothServiceScanner() {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         mServiceMap = new SparseArray<>();
+        mDevices = new LinkedList<>();
+    }
+
+    public void setDiscoveryListener(DiscoveryListener discoveryListener) {
+        wrCallback = new WeakReference<>(discoveryListener);
     }
 
     @Override
@@ -61,20 +67,47 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
             onDiscoveryFinished(context);
         } else if(action.equalsIgnoreCase(BluetoothAdapter.ACTION_DISCOVERY_STARTED)) {
             onDiscoveryStarted(context);
+        } else if(action.equalsIgnoreCase(BluetoothDevice.ACTION_BOND_STATE_CHANGED)) {
+            final BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            final int bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE);
+            onDeviceBondStateChanged(device, bondState);
         } else {
             Log.e(TAG, "Unexpected Action is received");
         }
     }
 
+    private void onDeviceBondStateChanged(BluetoothDevice device, int bondState) {
+        int devId;
+        final DiscoveryListener discoveryListener = wrCallback.get();
+        switch(bondState) {
+            case BluetoothDevice.BOND_BONDED:
+                if(device.fetchUuidsWithSdp()) {
+                    for(BluetoothClient service : mServices) {
+                        if(searchUuid(device.getUuids(), service.getServiceUuid())) {
+                            if((devId = service.onBindDevice(device)) >= 0) {
+                                mServiceMap.put(devId, service);
+                                discoveryListener.onServiceReady(service, devId);
+                            }
+                        }
+                    }
+                }
+                break;
+            case BluetoothDevice.BOND_BONDING:
+                Log.d(TAG, String.format(Locale.getDefault(), "Device %s is bonding" , device.getName()));
+                break;
+        }
+    }
+
     private void onDiscoveryStarted(Context context) {
-        final Callback callback = wrCallback.get();
+        final DiscoveryListener callback = wrCallback.get();
         Log.d(TAG, String.format(Locale.getDefault(), "Discovery started /w %d Devices found", mDevices.size()));
         callback.onDiscoveryStarted();
     }
 
     private void onDiscoveryFinished(Context context) {
+        mBluetoothAdapter.cancelDiscovery();
         Log.d(TAG, String.format(Locale.getDefault(), "Discovery Finished /w %d Devices found", mDevices.size()));
-        final Callback callback = wrCallback.get();
+        final DiscoveryListener callback = wrCallback.get();
         int devId;
         for(BluetoothDevice device : mDevices) {
             /**
@@ -89,6 +122,8 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
                         }
                     }
                 }
+            } else {
+                Log.e(TAG, String.format(Locale.getDefault(), "Fetching UUID Fail : %s", device.getName()));
             }
         }
         callback.onDiscoveryFinished();
@@ -96,17 +131,28 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
 
     private void onDeviceFound(Context context, BluetoothDevice device, short rssi) {
         mDevices.add(device);
-        wrCallback.get().onDeviceFound(device, rssi);
+        final DiscoveryListener discoveryListener = wrCallback.get();
+        if(discoveryListener != null) {
+            discoveryListener.onDeviceFound(device, rssi, device.getBondState() == BluetoothDevice.BOND_BONDED);
+        }
         Log.d(TAG, String.format(Locale.getDefault(), "%s", device.getName()));
         Toast.makeText(context, String.format(Locale.getDefault(), "%s", device.getName()), Toast.LENGTH_SHORT).show();
     }
 
     public void startDiscovery(BluetoothClient...services) {
+        mDevices.removeAll(mDevices);
         mServices = Arrays.asList(services);
-        mDevices = new LinkedList<>();
         Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
         for(BluetoothDevice device : devices) {
             mDevices.add(device);
+        }
+        while(mBluetoothAdapter.isDiscovering()) {
+            mBluetoothAdapter.cancelDiscovery();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Log.e(TAG, e.getLocalizedMessage());
+            }
         }
         mBluetoothAdapter.startDiscovery();
     }
@@ -139,11 +185,18 @@ public class BluetoothServiceScanner extends BroadcastReceiver {
         context.unregisterReceiver(this);
     }
 
-    public interface Callback {
+    public static BluetoothServiceScanner getInstance() {
+        if(SINGLETON == null) {
+            SINGLETON = new BluetoothServiceScanner();
+        }
+        return SINGLETON;
+    }
+
+    public interface DiscoveryListener {
 
         void onServiceReady(BluetoothClient service, int devId);
 
-        void onDeviceFound(BluetoothDevice device, short rssi);
+        void onDeviceFound(BluetoothDevice device, short rssi, boolean isbonded);
 
         void onDiscoveryFinished();
 

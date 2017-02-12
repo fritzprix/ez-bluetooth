@@ -2,10 +2,10 @@ package com.example.ezbluetooth.client;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.os.Parcel;
 import android.support.annotation.Nullable;
 import android.util.Log;
 import android.util.SparseArray;
-
 
 import com.example.ezbluetooth.BluetoothClient;
 
@@ -34,11 +34,31 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
     private HashSet<Integer> mDevIds;
     private int currentDevId;
 
+
     protected AbsBluetoothClient() {
         mDevId = 0;
         currentDevId = 0;
         mDevices = new SparseArray<>();
         mDevIds = new HashSet<>();
+    }
+
+    public AbsBluetoothClient(Parcel source) {
+        int devId, size = source.readInt();
+        mDevices = new SparseArray<>(size);
+        mDevIds = new HashSet<>(size);
+        currentDevId = 0;
+        for(int idx = 0;idx < size; idx++) {
+            devId = source.readInt();
+            BluetoothDevice device = source.readParcelable(BluetoothDevice.class.getClassLoader());
+            mDevIds.add(devId);
+            mDevices.put(devId, device);
+            if(idx == size - 1) {
+                /**
+                 *  guarantee last device Id with value larger than the largest among the saved.
+                 */
+                mDevId = devId + 1;
+            }
+        }
     }
 
     @Override
@@ -65,11 +85,13 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
     public synchronized void start(int devId) throws IllegalStateException, IOException, InvalidParameterException {
 
         if(!mDevIds.contains(devId)) {
+            Log.e(TAG, String.format(Locale.getDefault(),"Invalid device Id (%d)", devId));
             throw new InvalidParameterException(String.format(Locale.getDefault(),"Invalid device Id (%d)", devId));
         }
 
         final BluetoothDevice device = mDevices.get(devId);
         if(device == null) {
+            Log.e(TAG, String.format(Locale.getDefault(),"No device is bound to service %s", getServiceName()));
             throw new IllegalStateException(String.format(Locale.getDefault(), "No device is bound to service %s", getServiceName()));
         }
 
@@ -84,12 +106,13 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
                 public void run() {
                     try {
                         mClientSocket = device.createRfcommSocketToServiceRecord(getServiceUuid());
+                        Log.e(TAG, "Created Socket");
                         mClientSocket.connect();
+                        Log.e(TAG, "Socket Connected");
                         onConnected();
                         isConnected = true;
                         mOutputStream = new DataOutputStream(mClientSocket.getOutputStream());
                         DataInputStream dis = new DataInputStream(mClientSocket.getInputStream());
-                        Log.e(TAG, "Connected");
                         onServiceReady();
                         Log.e(TAG, "Service Ready");
                         byte[] rxBuffer = new byte[getReadSize()];
@@ -147,10 +170,13 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
             return;
         }
 
-        try {
-            mClientSocket.close();
-        } catch (IOException e) {
-            Log.e(TAG, e.getLocalizedMessage());
+        synchronized (this) {
+            try {
+                mClientSocket.close();
+                mClientThread = null;
+            } catch (IOException e) {
+                Log.e(TAG, e.getLocalizedMessage());
+            }
         }
     }
 
@@ -166,4 +192,12 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
     protected abstract byte[] onDataReceived(byte[] rxBuffer);
     protected abstract void onServiceReady();
 
+    protected void saveToParcel(Parcel dest, int flags) {
+        dest.writeInt(mDevices.size());                     // save the count of client devices
+        for(int devId : mDevIds) {
+            BluetoothDevice device = mDevices.get(devId);
+            dest.writeInt(devId);                          // save the device Id
+            dest.writeParcelable(device, flags);           // save the corresponding device to the Id
+        }
+    }
 }
