@@ -71,15 +71,7 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
         return mDevId++;
     }
 
-    @Override
-    public void onConnected() {
-        isConnected = true;
-    }
 
-    @Override
-    public void onDisconnected() {
-        isConnected = false;
-    }
 
     @Override
     public synchronized void start(int devId) throws IllegalStateException, IOException, InvalidParameterException {
@@ -106,14 +98,11 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
                 public void run() {
                     try {
                         mClientSocket = device.createRfcommSocketToServiceRecord(getServiceUuid());
-                        Log.e(TAG, "Created Socket");
                         mClientSocket.connect();
-                        Log.e(TAG, "Socket Connected");
-                        onConnected();
                         isConnected = true;
                         mOutputStream = new DataOutputStream(mClientSocket.getOutputStream());
                         DataInputStream dis = new DataInputStream(mClientSocket.getInputStream());
-                        onServiceReady();
+                        onConnected();
                         Log.e(TAG, "Service Ready");
                         byte[] rxBuffer = new byte[getReadSize()];
                         while (isConnected) {
@@ -137,6 +126,7 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
                                 Log.e(TAG, e.getLocalizedMessage());
                             }
                         }
+                        isConnected = false;
                         onDisconnected();
                     }
                 }
@@ -190,7 +180,6 @@ public abstract class AbsBluetoothClient implements BluetoothClient {
 
     protected abstract int getReadSize();
     protected abstract byte[] onDataReceived(byte[] rxBuffer);
-    protected abstract void onServiceReady();
 
     protected void saveToParcel(Parcel dest, int flags) {
         dest.writeInt(mDevices.size());                     // save the count of client devices
