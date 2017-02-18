@@ -111,7 +111,20 @@ public class SimpleEchoClient extends AbsBluetoothClient {
     }
 
     @Override
-    protected void onServiceReady() {
+    public void onDisconnected() {
+        if(mClientThread == null) {
+            return;
+        }
+        try {
+            mClientThread.join();
+        } catch (InterruptedException e) {
+            Log.e(TAG, e.getLocalizedMessage());
+        }
+    }
+
+    @Override
+    public void onConnected() {
+        Log.e(TAG, "Connected");
         totalReceived = 0;
         totalErrorCount = 0;
         lastTimeStamp = System.currentTimeMillis();
@@ -136,25 +149,6 @@ public class SimpleEchoClient extends AbsBluetoothClient {
             }
         });
         mClientThread.start();
-    }
-
-    @Override
-    public void onDisconnected() {
-        super.onDisconnected();
-        if(mClientThread == null) {
-            return;
-        }
-        try {
-            mClientThread.join();
-        } catch (InterruptedException e) {
-            Log.e(TAG, e.getLocalizedMessage());
-        }
-    }
-
-    @Override
-    public void onConnected() {
-        Log.e(TAG, "Connected");
-        super.onConnected();
     }
 
     @Override
